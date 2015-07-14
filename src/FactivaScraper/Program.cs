@@ -10,42 +10,67 @@ using CsvHelper;
 
 namespace FactivaScraper
 {
-    class Program
+    static public class Program
     {
         static void Main(string[] args)
         {
             Console.WriteLine(Environment.CurrentDirectory);
             CQ f = File.ReadAllText("factiva.htm");
-//            CQ article = f["div.article .enArticle"];
-            CQ paragraphs = f["p.enarticleParagraph"];
+            CQ articles = f["div.enArticle"];
 
-            IList<string[]> rows = new List<string[]>();
-            var speakers = new List<string>();
-            string speaker = String.Empty;
-
-            for(int i = 0; i<paragraphs.Length; i++)
+            foreach (var article in articles)
             {
-                var paragraph = paragraphs[i];
-                var newSpeaker = Helpers.FindSpeaker(paragraph.InnerText);
-                if (!newSpeaker.IsNullOrEmpty())
-                {
-                    speaker = newSpeaker;
+                Console.WriteLine(article.InnerText);
+            }
 
-                    if (!speakers.Contains(speaker))
-                        speakers.Add(speaker);
+            var groupedArticles =
+                from a in articles
+                group a by a.ParentNode.Id
+                into g
+                select new { Title = g.Key, Article = g };
+                //article.GroupBy(a => a.ClassName, b => b.ChildNodes);
+            IList<string[]> rows = new List<string[]>();
+            foreach (var x in groupedArticles)
+            {
+                Console.WriteLine(x.Title);
+
+                Console.WriteLine(x.Article);// ["p.enarticleParagraph"];
+
+
+                CQ paragraphs = f["p.enarticleParagraph"];
+                var speakers = new List<string>();
+                string speaker = String.Empty;
+
+
+                for (int i = 0; i < paragraphs.Length; i++)
+                {
+                    var paragraph = paragraphs[i];
+                    var newSpeaker = FindSpeaker(paragraph.InnerText);
+                    if (!newSpeaker.IsNullOrEmpty())
+                    {
+                        speaker = newSpeaker;
+
+                        if (!speakers.Contains(speaker))
+                            speakers.Add(speaker);
+                    }
+                    string speach = GetSpeach(paragraphs[i].InnerText, newSpeaker);
+                    speach = RemoveNewLine(speach);
+                    string[] row = new string[4];
+                    row[0] = "TK";
+                    row[1] = "TK-Date";
+                    row[2] = speaker;
+                    row[3] = speach;
+                    rows.Add(row);
                 }
-                string speech = Helpers.GetSpeech(paragraphs[i].InnerText, newSpeaker);
-                string[] row = new string[4];
-                rows.Add(new string[4]);
-                row[0] = "TK";
-                row[1] = "TK-Date";
-                row[2] = speaker;
-                row[3] = speech;
-                rows.Add(row);
             }
             WriteCsv(rows);
             Console.WriteLine("press any key to continue");
             Console.Read();
+        }
+
+        private static string RemoveNewLine(string speach)
+        {
+            return speach.Replace("\n", " ");
         }
 
         public static void WriteCsv(IList<string[]> rows)
@@ -68,10 +93,6 @@ namespace FactivaScraper
             }
         }
 
-    }
-
-    public static class Helpers
-    {
         public static string FindSpeaker(string text)
         {
             var indexOfColon = IndexOfColon(text);
@@ -96,11 +117,14 @@ namespace FactivaScraper
             return positionOfColon;
         }
 
-        public static string GetSpeech(string paragraph, string speeker)
+        public static string GetSpeach(string paragraph, string speaker)
         {
-            if (speeker.IsNullOrEmpty())
+            if (speaker.IsNullOrEmpty())
                 return paragraph;
             var indexOfColon = IndexOfColon(paragraph);
+            // if the colon is at the end of the paragraph, skip the paragraph
+            if (indexOfColon >= paragraph.Length - 1)
+                return string.Empty;
             // we don't want the colon or the space after it, so go two ahead. May not be necessary with .Trim()
             return paragraph.Substring(indexOfColon + 2).Trim();
         }
